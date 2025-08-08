@@ -1,134 +1,188 @@
 #include <ncurses.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
-static WINDOW *create_newwin(int height, int width, int starty, int startx);
-static void destroy_win(WINDOW *local_win);
-static void draw_digit(WINDOW *win, int y, int x, int digit, int color_on, int color_off);
-static void draw_pomo_timer(WINDOW *win, int min_dec, int min, int sec_dec, int sec);
+#define BEGIN_ROW (LINES - num_opts) / 2
 
-static const int digits[11][5][3] = {
-                        /* digits */
-    { {1, 1, 1}, {1, 0, 1}, {1, 0, 1}, {1, 0, 1}, {1, 1, 1}, },
-    { {0, 1, 0}, {1, 1, 0}, {0, 1, 0}, {0, 1, 0}, {1, 1, 1}, },
-    { {1, 1, 1}, {0, 0, 1}, {1, 1, 1}, {1, 0, 0}, {1, 1, 1}, },
-    { {1, 1, 1}, {0, 0, 1}, {0, 1, 1}, {0, 0, 1}, {1, 1, 1}, },
-    { {1, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 0, 1}, {0, 0, 1}, },
-    { {1, 1, 1}, {1, 0, 0}, {1, 1, 1}, {0, 0, 1}, {1, 1, 1}, },
-    { {1, 1, 1}, {1, 0, 0}, {1, 1, 1}, {1, 0, 1}, {1, 1, 1}, },
-    { {1, 1, 1}, {0, 0, 1}, {0, 1, 0}, {1, 0, 0}, {1, 0, 0}, },
-    { {1, 1, 1}, {1, 0, 1}, {1, 1, 1}, {1, 0, 1}, {1, 1, 1}, },
-    { {1, 1, 1}, {1, 0, 1}, {1, 1, 1}, {0, 0, 1}, {1, 1, 1}, },
-    { {0, 0, 1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 1}, },
+typedef struct Timer {
+	int minutes;
+	int seconds;
+	int session;
+	int status;
+}
+Timer;
+
+static Timer *create_timer(void);
+static void draw_menu(int choice);
+static int select_choice(int num_opts);
+static void run(Timer *t);
+static void show_info(void);
+// static void set_time(Timer *t);
+static void setup(void);
+
+static const char title[] = "== POMODORO TIMER ==";
+static const char *opts[] = {
+	"Start Session.", "Set Timer.", "About pomodoro.", "Exit."
 };
-static const int height = 12;
-static const int width = 45;
-static const int wheight = (height - 2) / 3;
-static const int wwidth = (width / 4);
+static const int num_opts = sizeof(opts) / sizeof(opts[0]);
 
-static WINDOW
-*create_newwin(int height, int width, int starty, int startx)
+static Timer
+*create_timer(void)
 {
-    WINDOW *local_win;
-    local_win = newwin(height, width, starty, startx);
-    box(local_win, 0, 0);
-    wrefresh(local_win);
-    return local_win;
+	Timer *t = malloc(sizeof(Timer));
+	if (!t)
+		return NULL;
+	t->minutes = 25;
+	t->seconds = 0;
+	t->session = 4;
+	t->status = 1;
+
+	return t;
 }
 
 static void
-destroy_win(WINDOW *local_win)
+draw_menu(int choice)
 {
-    wborder(local_win, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ');
-    wrefresh(local_win);
-    delwin(local_win);
+	mvprintw(BEGIN_ROW - 2, (COLS - strlen(title)) / 2, "%s", title);
+	for (int i = 0; i < num_opts; i++) {
+		if (i == choice) {
+			mvprintw(BEGIN_ROW + i, ((COLS - strlen(opts[i])) / 2) - 2, "> %s", opts[i]);
+		} else {
+			mvprintw(BEGIN_ROW + i, ((COLS - strlen(opts[i])) / 2) - 2, "  %s", opts[i]);
+		}
+	}
+}
+
+static int
+select_choice(int num_opts)
+{
+	int ch, choice = 0;
+	while (1) {
+		draw_menu(choice);
+		ch = getch();
+
+		switch (ch) {
+			case KEY_UP:
+				choice = (choice - 1 + num_opts) % num_opts;
+				break;
+			case KEY_DOWN:
+				choice = (choice+1) % num_opts;
+				break;
+			case '\n': {
+				return choice;
+			case 'q':
+				return -1;
+			}
+		}
+	}
 }
 
 static void
-draw_digit(WINDOW *win, int y, int x, int digit, int color_on, int color_off) {
-    for (int i = 0; i < 5; i++) {
-        for (int j  = 0; j < 3; j++) {
-            int pixel = digits[digit][i][j];
-            int pair = pixel ? color_on : color_off;
-            wattron(win, COLOR_PAIR(pair));
-            mvwaddch(win, y + i, x + j, ' ');
-            wattroff(win, COLOR_PAIR(pair));
-        }
-    }
+run(Timer *t)
+{
+	clear();
+	int session_count = 1;
+	char time[32];
+	char session[32];
+	while (session_count != t->session + 1) {
+		if (t->seconds < 0) {
+			t->seconds = 59;
+			t->minutes--;
+			if (t->minutes < 0) {
+				t->status = 0;
+			}
+		}
+		if (t->status) {
+			mvprintw(BEGIN_ROW - 2, (COLS - strlen(title)) / 2, "%s", title);
+			snprintf(time, sizeof(time), "Time: %02d:%02d", t->minutes, t->seconds);
+			mvprintw(BEGIN_ROW, (COLS - strlen("SESSION: POMODORO")) / 2, "SESSION: POMODORO");
+			mvprintw(BEGIN_ROW + 1, (COLS - strlen(time)) / 2, "%s", time);
+		}
+
+		snprintf(session, sizeof(session), "%d/%d", session_count, t->session);
+		mvprintw(BEGIN_ROW + 3, (COLS - strlen(session)) / 2, "%s", session);
+		t->seconds--;
+		refresh();
+		sleep(1);
+	}
+}
+
+// static void
+// set_time(Timer *t)
+// {
+// }
+
+static void
+show_info(void)
+{
+	clear();
+	const char *info[] = {
+		"== ABOUT THE POMODORO ==",
+		"",
+		"The Pomodoro Technique is a simple method to improve",
+		"focus and productivity.",
+
+		"- Work for 25 minutes (1 Pomodoro)",
+		"- Take a short 5-minute break",
+		"- Every 4 cycles, take a long 15-minute break",
+		"",
+		"This helps keep your mind fresh and focused.",
+		"",
+		"Press any key to return to the menu.",
+	};
+	int num_lines = sizeof(info) / sizeof(info[0]);
+	for (int i = 0; i < num_lines; i++) {
+		mvprintw(((LINES - num_lines) / 2) + i, (COLS - strlen(info[i])) / 2, "%s", info[i]);
+	}
+	refresh();
+	getch();
 }
 
 static void
-draw_pomo_timer(WINDOW *win, int min_dec, int min, int sec_dec, int sec)
+setup(void)
 {
-    while (1) {
-        draw_digit(win, wheight, wwidth + 2, min_dec, 1, 0);
-        draw_digit(win, wheight, wwidth + 6, min, 1, 0);
-        draw_digit(win, wheight, wwidth + 9, 10, 1, 0); /* draw colon */
-        draw_digit(win, wheight, wwidth + 14, sec_dec, 1, 0);
-        draw_digit(win, wheight, wwidth + 18, sec, 1, 0);
-        wrefresh(win);
-        sec--;
-        if (sec < 0) {
-            sec_dec--;
-            if (sec_dec < 0) {
-                min--;
-                if (min < 0) {
-                    min_dec--;
-                    if (min_dec < 0) {
-                        break;
-                    }
-                    min = 9;
-                }
-                sec_dec = 5;
-            }
-            sec = 9;
-        }
-        sleep(1);
-    }
+	Timer *t = NULL;
+	int running = 1;
 
+	while (running) {
+		clear();
+		int choice = select_choice(num_opts);
+		switch (choice) {
+			case 0:
+				if (!t)
+					t = create_timer();
+				run(t);
+				break;
+			case 1:
+				// if (!t)
+				// 	t = create_timer();
+				// set_time(t);
+				break;
+			case 2:
+				show_info();
+				break;
+			case 3:
+			case -1:
+				running = 0;
+				break;
+		}
+	}
+	if (t)
+		free(t);
 }
 
 int
 main()
 {
-
-    int min_dec = 2, min = 5, sec_dec = 0, sec = 0;
-    int pause_min_dec = 0, pause_min = 5, pause_sec_dec = 0, pause_sec = 0;
-
-    int session = 1;
-    WINDOW *win = NULL;
-
-    initscr();
+	initscr();
     noecho();
-    curs_set(0);
     cbreak();
+	curs_set(FALSE);
     keypad(stdscr, TRUE);
-    start_color();
-    nodelay(win, 1);
-    init_pair(1, COLOR_BLACK, COLOR_GREEN);
-    init_pair(0, COLOR_BLACK, COLOR_BLACK);
-    int starty = (LINES - height) / 2;
-    int startx = (COLS - width) / 2;
-
-    refresh();
-    win = create_newwin(height, width, starty, startx);
-
-    while (session < 5) {
-        wattron(win, COLOR_PAIR(1));
-        mvwprintw(win, height - 3, (width - 10) / 2, "Session: %d", session);
-        wattroff(win, COLOR_PAIR(1));
-
-        wattron(win, COLOR_PAIR(1));
-        mvwprintw(win, 0, (width - 4) / 2, "FOCUS");
-        wattroff(win, COLOR_PAIR(1));
-        draw_pomo_timer(win, min_dec, min, sec_dec, sec);
-
-        wattron(win, COLOR_PAIR(1));
-        mvwprintw(win, 0, (width - 4) / 2, "BREAK");
-        wattroff(win, COLOR_PAIR(1));
-        draw_pomo_timer(win, pause_min_dec, pause_min, pause_sec_dec, pause_sec);
-        session++;
-    }
-    destroy_win(win);
+	start_color();
+	setup();
     endwin();
-    return 0;
+    return EXIT_SUCCESS;
 }
