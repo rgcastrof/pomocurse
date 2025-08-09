@@ -1,5 +1,4 @@
 #include <ncurses.h>
-#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -9,6 +8,8 @@
 typedef struct Timer {
 	int minutes;
 	int seconds;
+	int minbreak;
+	int secbreak;
 	int session;
 	int status;
 	char timebuf[32];
@@ -20,8 +21,9 @@ static Timer *create_timer(void);
 static void clear_screen(void);
 static void draw_menu(int choice);
 static int select_choice(int num_opts);
-static void display_time(Timer *t, int sessioncount);
-static void run(Timer *t);
+static void display_timer(Timer *t, int sessioncount, int min, int sec);
+static void update_time(Timer *t, int *min, int *sec, int *status, int sessioncount);
+static void run_timer(Timer *t);
 static void show_info(void);
 // static void set_time(Timer *t);
 static void setup(void);
@@ -40,6 +42,8 @@ static Timer
 		return NULL;
 	t->minutes = 25;
 	t->seconds = 0;
+	t->minbreak = 5;
+	t->secbreak = 0;
 	t->session = 4;
 	t->status = 1;
 
@@ -91,10 +95,14 @@ select_choice(int num_opts)
 }
 
 static void
-display_time(Timer *t, int sessioncount)
+display_timer(Timer *t, int sessioncount, int min, int sec)
 {
-	snprintf(t->timebuf, sizeof(t->timebuf), "Time: %02d:%02d", t->minutes, t->seconds);
-	mvprintw(BEGIN_ROW, (COLS - strlen("SESSION: POMODORO")) / 2, "SESSION: POMODORO");
+	clear_screen();
+	if (t->status)
+		mvprintw(BEGIN_ROW, (COLS - strlen("SESSION: POMODORO")) / 2, "SESSION: POMODORO");
+	else
+		mvprintw(BEGIN_ROW, (COLS - strlen("SESSION: PAUSE")) / 2, "SESSION: PAUSE");
+	snprintf(t->timebuf, sizeof(t->timebuf), "Time: %02d:%02d", min, sec);
 	mvprintw(BEGIN_ROW + 1, (COLS - strlen(t->timebuf)) / 2, "%s", t->timebuf);
 
 	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sessioncount, t->session);
@@ -103,21 +111,35 @@ display_time(Timer *t, int sessioncount)
 }
 
 static void
-run(Timer *t)
+update_time(Timer *t, int *min, int *sec, int *status, int sessioncount)
 {
-	clear_screen();
-	int sessioncount = 1;
-	while (sessioncount != t->session + 1) {
-		if (t->seconds < 0) {
-			t->seconds = 59;
-			t->minutes--;
-			if (t->minutes < 0) {
-				t->status = 0;
-			}
-		}
-		display_time(t, sessioncount);
-		t->seconds--;
+	while (1) {
+		display_timer(t, sessioncount, *min, *sec);
 		sleep(1);
+		if (*min <= 0 && *sec <= 0) {
+			*status = (*status == 1) ? 0 : 1;
+			return;
+		}
+		if (*sec == 0) {
+			*sec = 60;
+			(*min)--;
+		}
+		(*sec)--;
+	}
+}
+
+static void
+run_timer(Timer *t)
+{
+	int sessioncount = 1;
+	for (int i = 0; i < t->session; i++) {
+		int work_min = t->minutes;
+		int work_sec = t->seconds;
+		update_time(t, &work_min, &work_sec, &t->status, sessioncount);
+		int break_min = t->minbreak;
+		int break_sec = t->secbreak;
+		update_time(t, &break_min, &break_sec, &t->status, sessioncount);
+		sessioncount++;
 	}
 }
 
@@ -164,7 +186,7 @@ setup(void)
 			case 0:
 				if (!t)
 					t = create_timer();
-				run(t);
+				run_timer(t);
 				break;
 			case 1:
 				// if (!t)
