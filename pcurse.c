@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #define BEGIN_ROW (LINES - num_opts) / 2
+#define CENTER_COL(str) (COLS - strlen(str)) / 2
 
 typedef struct Timer {
 	int minutes;
@@ -22,6 +23,7 @@ static void init_pairs(void);
 static void clear_screen(void);
 static void draw_menu(int choice);
 static int select_choice(int num_opts);
+static void drawbar(int min);
 static void display_timer(Timer *t, int sessioncount, int min, int sec);
 static void update_time(Timer *t, int *min, int *sec, int *status, int sessioncount);
 static void run_timer(Timer *t);
@@ -34,6 +36,7 @@ static const char *opts[] = {
 	"Start Session.", "Set Timer.", "About pomodoro.", "Exit."
 };
 static const int num_opts = sizeof(opts) / sizeof(opts[0]);
+char bar[] = "[=====================]";
 
 static Timer
 *create_timer(void)
@@ -67,7 +70,7 @@ clear_screen(void)
 {
 	clear();
 	attron(COLOR_PAIR(4));
-	mvprintw(BEGIN_ROW - 2, (COLS - strlen(title)) / 2, "%s", title);
+	mvprintw(BEGIN_ROW - 2, CENTER_COL(title), "%s", title);
 	attroff(COLOR_PAIR(4));
 }
 
@@ -78,10 +81,10 @@ draw_menu(int choice)
 	for (int i = 0; i < num_opts; i++) {
 		if (i == choice) {
 			attron(COLOR_PAIR(5));
-			mvprintw(BEGIN_ROW + i, ((COLS - strlen(opts[i])) / 2) - 2, "> %s", opts[i]);
+			mvprintw(BEGIN_ROW + i, CENTER_COL(opts[i]) - 2, "> %s", opts[i]);
 			attroff(COLOR_PAIR(5));
 		} else {
-			mvprintw(BEGIN_ROW + i, ((COLS - strlen(opts[i])) / 2) - 2, "  %s", opts[i]);
+			mvprintw(BEGIN_ROW + i, CENTER_COL(opts[i]) - 2, "  %s", opts[i]);
 		}
 	}
 }
@@ -111,26 +114,34 @@ select_choice(int num_opts)
 }
 
 static void
+drawbar(int min)
+{
+	mvprintw(BEGIN_ROW + 5, CENTER_COL(bar), "%s", bar);
+	bar[min-4] = ' ';
+}
+
+static void
 display_timer(Timer *t, int sessioncount, int min, int sec)
 {
 	clear_screen();
 	if (t->status) {
 		attron(COLOR_PAIR(1));
-		mvprintw(BEGIN_ROW, (COLS - strlen("FOCUS")) / 2, "FOCUS");
+		mvprintw(BEGIN_ROW, CENTER_COL("FOCUS"), "FOCUS");
 		attroff(COLOR_PAIR(1));
 	}
 	else {
 		attron(COLOR_PAIR(2));
-		mvprintw(BEGIN_ROW, (COLS - strlen("BREAK")) / 2, "BREAK");
+		mvprintw(BEGIN_ROW, CENTER_COL("BREAK"), "BREAK");
 		attroff(COLOR_PAIR(2));
 	}
 	snprintf(t->timebuf, sizeof(t->timebuf), "Time: %02d:%02d", min, sec);
-	mvprintw(BEGIN_ROW + 1, (COLS - strlen(t->timebuf)) / 2, "%s", t->timebuf);
+	mvprintw(BEGIN_ROW + 1, CENTER_COL(t->timebuf), "%s", t->timebuf);
 
 	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sessioncount, t->session);
 	attron(COLOR_PAIR(3));
-	mvprintw(BEGIN_ROW + 3, (COLS - strlen(t->sessionbuf)) / 2, "%s", t->sessionbuf);
+	mvprintw(BEGIN_ROW + 3, CENTER_COL(t->sessionbuf), "%s", t->sessionbuf);
 	attroff(COLOR_PAIR(3));
+	drawbar(min);
 	refresh();
 }
 
@@ -192,7 +203,7 @@ show_info(void)
 	};
 	int num_lines = sizeof(info) / sizeof(info[0]);
 	for (int i = 0; i < num_lines; i++) {
-		mvprintw(((LINES - num_lines) / 2) + i, (COLS - strlen(info[i])) / 2, "%s", info[i]);
+		mvprintw(((LINES - num_lines) / 2) + i, CENTER_COL(info[i]), "%s", info[i]);
 	}
 	refresh();
 	getch();
