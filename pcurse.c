@@ -70,11 +70,11 @@ select_choice(int num_opts)
 			case KEY_DOWN:
 				choice = (choice+1) % num_opts;
 				break;
-			case '\n': {
+			case '\n': 
 				return choice;
 			case 'q':
 				return -1;
-			}
+			
 		}
 	}
 }
