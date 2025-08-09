@@ -18,6 +18,7 @@ typedef struct Timer {
 Timer;
 
 static Timer *create_timer(void);
+static void init_pairs(void);
 static void clear_screen(void);
 static void draw_menu(int choice);
 static int select_choice(int num_opts);
@@ -51,10 +52,23 @@ static Timer
 }
 
 static void
+init_pairs(void)
+{
+	start_color();
+	init_pair(1, COLOR_GREEN, COLOR_BLACK);
+	init_pair(2, COLOR_BLUE, COLOR_BLACK);
+	init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
+	init_pair(4, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(5, COLOR_CYAN, COLOR_BLACK);
+}
+
+static void
 clear_screen(void)
 {
 	clear();
+	attron(COLOR_PAIR(4));
 	mvprintw(BEGIN_ROW - 2, (COLS - strlen(title)) / 2, "%s", title);
+	attroff(COLOR_PAIR(4));
 }
 
 static void
@@ -63,7 +77,9 @@ draw_menu(int choice)
 	clear_screen();
 	for (int i = 0; i < num_opts; i++) {
 		if (i == choice) {
+			attron(COLOR_PAIR(5));
 			mvprintw(BEGIN_ROW + i, ((COLS - strlen(opts[i])) / 2) - 2, "> %s", opts[i]);
+			attroff(COLOR_PAIR(5));
 		} else {
 			mvprintw(BEGIN_ROW + i, ((COLS - strlen(opts[i])) / 2) - 2, "  %s", opts[i]);
 		}
@@ -98,15 +114,23 @@ static void
 display_timer(Timer *t, int sessioncount, int min, int sec)
 {
 	clear_screen();
-	if (t->status)
-		mvprintw(BEGIN_ROW, (COLS - strlen("SESSION: POMODORO")) / 2, "SESSION: POMODORO");
-	else
-		mvprintw(BEGIN_ROW, (COLS - strlen("SESSION: PAUSE")) / 2, "SESSION: PAUSE");
+	if (t->status) {
+		attron(COLOR_PAIR(1));
+		mvprintw(BEGIN_ROW, (COLS - strlen("FOCUS")) / 2, "FOCUS");
+		attroff(COLOR_PAIR(1));
+	}
+	else {
+		attron(COLOR_PAIR(2));
+		mvprintw(BEGIN_ROW, (COLS - strlen("BREAK")) / 2, "BREAK");
+		attroff(COLOR_PAIR(2));
+	}
 	snprintf(t->timebuf, sizeof(t->timebuf), "Time: %02d:%02d", min, sec);
 	mvprintw(BEGIN_ROW + 1, (COLS - strlen(t->timebuf)) / 2, "%s", t->timebuf);
 
 	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sessioncount, t->session);
+	attron(COLOR_PAIR(3));
 	mvprintw(BEGIN_ROW + 3, (COLS - strlen(t->sessionbuf)) / 2, "%s", t->sessionbuf);
+	attroff(COLOR_PAIR(3));
 	refresh();
 }
 
@@ -179,6 +203,7 @@ setup(void)
 {
 	Timer *t = NULL;
 	int running = 1;
+	init_pairs();
 
 	while (running) {
 		int choice = select_choice(num_opts);
@@ -214,7 +239,6 @@ main()
     cbreak();
 	curs_set(FALSE);
     keypad(stdscr, TRUE);
-	start_color();
 	setup();
     endwin();
     return EXIT_SUCCESS;
