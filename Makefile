@@ -3,7 +3,7 @@
 NAME    = pomocurse
 
 CC     = cc
-CFLAGS = -std=c99 -Wall -Wextra -pedantic
+CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -pedantic
 LDFLAGS = -lncurses
 
 BIN_DIR = /usr/local/bin

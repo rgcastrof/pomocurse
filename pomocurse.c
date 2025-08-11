@@ -1,4 +1,5 @@
 #include <ncurses.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -24,12 +25,16 @@ static void clearscreen(void);
 static void drawmenu(int choice);
 static void drawbar(int totalsec, int remainsec);
 static int selchoice(int numopts);
-static void displaytimer(Timer *t, int sesscount, int min, int sec);
+static void drawtimer(Timer *t, int sesscount, int min, int sec);
 static void updtimer(Timer *t, int *min, int *sec, int *status, int sesscount);
-static void run(Timer *t);
+static void startpomo(Timer *t);
 // static void settime(Timer *t);
-static void diplayinfo(void);
+static void showinfo(void);
+static void runmenu(Timer **t);
 static void setup(void);
+static void handleopts(int argc, char *argv[], Timer *t);
+static void cleanup(Timer *t);
+static void help(void);
 
 static const char title[] = "== POMODORO TIMER ==";
 static const char *opts[] = {
@@ -133,7 +138,7 @@ selchoice(int numopts)
 }
 
 static void
-displaytimer(Timer *t, int sesscount, int min, int sec)
+drawtimer(Timer *t, int sesscount, int min, int sec)
 {
 	clearscreen();
 	int remainsec = min * 60 + sec;
@@ -163,7 +168,7 @@ static void
 updtimer(Timer *t, int *min, int *sec, int *status, int sesscount)
 {
 	while (1) {
-		displaytimer(t, sesscount, *min, *sec);
+		drawtimer(t, sesscount, *min, *sec);
 		sleep(1);
 		if (*min <= 0 && *sec <= 0) {
 			*status = (*status == 1) ? 0 : 1;
@@ -178,7 +183,7 @@ updtimer(Timer *t, int *min, int *sec, int *status, int sesscount)
 }
 
 static void
-run(Timer *t)
+startpomo(Timer *t)
 {
 	int sesscount = 1;
 	for (int i = 0; i < t->session; i++) {
@@ -198,7 +203,7 @@ run(Timer *t)
 // }
 
 static void
-diplayinfo(void)
+showinfo(void)
 {
 	clear();
 	const char *info[] = {
@@ -224,19 +229,18 @@ diplayinfo(void)
 }
 
 static void
-setup(void)
+runmenu(Timer **t)
 {
-	Timer *t = NULL;
+	setup();
 	int running = 1;
-	initpairs();
 
 	while (running) {
 		int choice = selchoice(numopts);
 		switch (choice) {
 			case 0:
-				if (!t)
-					t = createtimer();
-				run(t);
+				if (!*t)
+					*t = createtimer();
+				startpomo(*t);
 				break;
 			case 1:
 				// if (!t)
@@ -244,7 +248,7 @@ setup(void)
 				// settime(t);
 				break;
 			case 2:
-				diplayinfo();
+				showinfo();
 				break;
 			case 3:
 			case -1:
@@ -252,19 +256,76 @@ setup(void)
 				break;
 		}
 	}
-	if (t)
-		free(t);
 }
 
-int
-main()
+static void
+setup(void)
 {
 	initscr();
     noecho();
     cbreak();
 	curs_set(FALSE);
     keypad(stdscr, TRUE);
-	setup();
-    endwin();
+	initpairs();
+}
+
+static void
+handleopts(int argc, char *argv[], Timer *t)
+{
+	int opt;
+	while ((opt = getopt(argc, argv, "f:p:s:h")) != -1) {
+		switch (opt) {
+			case 'f':
+				t->min = atoi(optarg);
+				break;
+			case 'p':
+				t->minbreak = atoi(optarg);
+				break;
+			case 's':
+				t->session = atoi(optarg);
+				break;
+			case 'h':
+				help();
+				exit(EXIT_SUCCESS);
+			default:
+				fprintf(stderr, "Usage: %s [-f focus] [-p pause] [-s sessions] [-h help]\n", argv[0]);
+				exit(EXIT_FAILURE);
+		}
+	}
+}
+
+static void
+cleanup(Timer *t)
+{
+	if (t) {
+		free(t);
+		t = NULL;
+	}
+	endwin();
+}
+
+static void
+help(void)
+{
+    printf("Pomodoro Timer - Usage:\n");
+    printf("  -f <minutes>   Set focus time (default: 25)\n");
+    printf("  -p <minutes>   Set break time (default: 5)\n");
+    printf("  -s <sessions>  Set number of sessions (default: 4)\n");
+    printf("  -h             Show this help message\n");
+}
+
+int
+main(int argc, char *argv[])
+{
+	Timer *t = NULL;
+	if (argc == 1)
+		runmenu(&t); /* run a interactive menu */
+	else {
+		t = createtimer();
+		handleopts(argc, argv, t);
+		setup();
+		startpomo(t); /*start the timer immediately */
+	}
+	cleanup(t);
     return EXIT_SUCCESS;
 }
