@@ -3,59 +3,43 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BEGIN_ROW (LINES - num_opts) / 2
+#define BEGIN_ROW (LINES - numopts) / 2
 #define CENTER_COL(str) (COLS - strlen(str)) / 2
 
 typedef struct Timer {
-	int minutes;
-	int seconds;
+	int min;
+	int sec;
 	int minbreak;
 	int secbreak;
 	int session;
-	int status;
+	int state;
 	char timebuf[32];
 	char sessionbuf[32];
 }
 Timer;
 
-static Timer *create_timer(void);
-static void init_pairs(void);
-static void clear_screen(void);
-static void draw_menu(int choice);
-static int select_choice(int num_opts);
+static void initpairs(void);
+static Timer *createtimer(void);
+static void clearscreen(void);
+static void drawmenu(int choice);
 static void drawbar(int min);
-static void display_timer(Timer *t, int sessioncount, int min, int sec);
-static void update_time(Timer *t, int *min, int *sec, int *status, int sessioncount);
-static void run_timer(Timer *t);
-static void show_info(void);
-// static void set_time(Timer *t);
+static int selchoice(int numopts);
+static void displaytimer(Timer *t, int sesscount, int min, int sec);
+static void updtimer(Timer *t, int *min, int *sec, int *status, int sesscount);
+static void run(Timer *t);
+// static void settime(Timer *t);
+static void diplayinfo(void);
 static void setup(void);
 
 static const char title[] = "== POMODORO TIMER ==";
 static const char *opts[] = {
 	"Start Session.", "Set Timer.", "About pomodoro.", "Exit."
 };
-static const int num_opts = sizeof(opts) / sizeof(opts[0]);
+static const int numopts = sizeof(opts) / sizeof(opts[0]);
 char bar[] = "[=====================]";
 
-static Timer
-*create_timer(void)
-{
-	Timer *t = malloc(sizeof(Timer));
-	if (!t)
-		return NULL;
-	t->minutes = 25;
-	t->seconds = 0;
-	t->minbreak = 5;
-	t->secbreak = 0;
-	t->session = 4;
-	t->status = 1;
-
-	return t;
-}
-
 static void
-init_pairs(void)
+initpairs(void)
 {
 	start_color();
 	init_pair(1, COLOR_GREEN, COLOR_BLACK);
@@ -65,8 +49,24 @@ init_pairs(void)
 	init_pair(5, COLOR_CYAN, COLOR_BLACK);
 }
 
+static Timer
+*createtimer(void)
+{
+	Timer *t = malloc(sizeof(Timer));
+	if (!t)
+		return NULL;
+	t->min = 25;
+	t->sec = 0;
+	t->minbreak = 5;
+	t->secbreak = 0;
+	t->session = 4;
+	t->state = 1;
+
+	return t;
+}
+
 static void
-clear_screen(void)
+clearscreen(void)
 {
 	clear();
 	attron(COLOR_PAIR(4));
@@ -75,40 +75,16 @@ clear_screen(void)
 }
 
 static void
-draw_menu(int choice)
+drawmenu(int choice)
 {
-	clear_screen();
-	for (int i = 0; i < num_opts; i++) {
+	clearscreen();
+	for (int i = 0; i < numopts; i++) {
 		if (i == choice) {
 			attron(COLOR_PAIR(5));
 			mvprintw(BEGIN_ROW + i, CENTER_COL(opts[i]) - 2, "> %s", opts[i]);
 			attroff(COLOR_PAIR(5));
 		} else {
 			mvprintw(BEGIN_ROW + i, CENTER_COL(opts[i]) - 2, "  %s", opts[i]);
-		}
-	}
-}
-
-static int
-select_choice(int num_opts)
-{
-	int ch, choice = 0;
-	while (1) {
-		draw_menu(choice);
-		ch = getch();
-
-		switch (ch) {
-			case KEY_UP:
-				choice = (choice - 1 + num_opts) % num_opts;
-				break;
-			case KEY_DOWN:
-				choice = (choice+1) % num_opts;
-				break;
-			case '\n': 
-				return choice;
-			case 'q':
-				return -1;
-			
 		}
 	}
 }
@@ -120,11 +96,35 @@ drawbar(int min)
 	bar[min-4] = ' ';
 }
 
-static void
-display_timer(Timer *t, int sessioncount, int min, int sec)
+static int
+selchoice(int numopts)
 {
-	clear_screen();
-	if (t->status) {
+	int ch, choice = 0;
+	while (1) {
+		drawmenu(choice);
+		ch = getch();
+
+		switch (ch) {
+			case KEY_UP:
+				choice = (choice - 1 + numopts) % numopts;
+				break;
+			case KEY_DOWN:
+				choice = (choice+1) % numopts;
+				break;
+			case '\n': 
+				return choice;
+			case 'q':
+				return -1;
+			
+		}
+	}
+}
+
+static void
+displaytimer(Timer *t, int sesscount, int min, int sec)
+{
+	clearscreen();
+	if (t->state) {
 		attron(COLOR_PAIR(1));
 		mvprintw(BEGIN_ROW, CENTER_COL("FOCUS"), "FOCUS");
 		attroff(COLOR_PAIR(1));
@@ -137,7 +137,7 @@ display_timer(Timer *t, int sessioncount, int min, int sec)
 	snprintf(t->timebuf, sizeof(t->timebuf), "Time: %02d:%02d", min, sec);
 	mvprintw(BEGIN_ROW + 1, CENTER_COL(t->timebuf), "%s", t->timebuf);
 
-	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sessioncount, t->session);
+	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sesscount, t->session);
 	attron(COLOR_PAIR(3));
 	mvprintw(BEGIN_ROW + 3, CENTER_COL(t->sessionbuf), "%s", t->sessionbuf);
 	attroff(COLOR_PAIR(3));
@@ -146,10 +146,10 @@ display_timer(Timer *t, int sessioncount, int min, int sec)
 }
 
 static void
-update_time(Timer *t, int *min, int *sec, int *status, int sessioncount)
+updtimer(Timer *t, int *min, int *sec, int *status, int sesscount)
 {
 	while (1) {
-		display_timer(t, sessioncount, *min, *sec);
+		displaytimer(t, sesscount, *min, *sec);
 		sleep(1);
 		if (*min <= 0 && *sec <= 0) {
 			*status = (*status == 1) ? 0 : 1;
@@ -164,27 +164,27 @@ update_time(Timer *t, int *min, int *sec, int *status, int sessioncount)
 }
 
 static void
-run_timer(Timer *t)
+run(Timer *t)
 {
-	int sessioncount = 1;
+	int sesscount = 1;
 	for (int i = 0; i < t->session; i++) {
-		int work_min = t->minutes;
-		int work_sec = t->seconds;
-		update_time(t, &work_min, &work_sec, &t->status, sessioncount);
+		int work_min = t->min;
+		int work_sec = t->sec;
+		updtimer(t, &work_min, &work_sec, &t->state, sesscount);
 		int break_min = t->minbreak;
 		int break_sec = t->secbreak;
-		update_time(t, &break_min, &break_sec, &t->status, sessioncount);
-		sessioncount++;
+		updtimer(t, &break_min, &break_sec, &t->state, sesscount);
+		sesscount++;
 	}
 }
 
 // static void
-// set_time(Timer *t)
+// settime(Timer *t)
 // {
 // }
 
 static void
-show_info(void)
+diplayinfo(void)
 {
 	clear();
 	const char *info[] = {
@@ -201,9 +201,9 @@ show_info(void)
 		"",
 		"Press any key to return to the menu.",
 	};
-	int num_lines = sizeof(info) / sizeof(info[0]);
-	for (int i = 0; i < num_lines; i++) {
-		mvprintw(((LINES - num_lines) / 2) + i, CENTER_COL(info[i]), "%s", info[i]);
+	int numlines = sizeof(info) / sizeof(info[0]);
+	for (int i = 0; i < numlines; i++) {
+		mvprintw(((LINES - numlines) / 2) + i, CENTER_COL(info[i]), "%s", info[i]);
 	}
 	refresh();
 	getch();
@@ -214,23 +214,23 @@ setup(void)
 {
 	Timer *t = NULL;
 	int running = 1;
-	init_pairs();
+	initpairs();
 
 	while (running) {
-		int choice = select_choice(num_opts);
+		int choice = selchoice(numopts);
 		switch (choice) {
 			case 0:
 				if (!t)
-					t = create_timer();
-				run_timer(t);
+					t = createtimer();
+				run(t);
 				break;
 			case 1:
 				// if (!t)
-				// 	t = create_timer();
-				// set_time(t);
+				// 	t = createtimer();
+				// settime(t);
 				break;
 			case 2:
-				show_info();
+				diplayinfo();
 				break;
 			case 3:
 			case -1:
