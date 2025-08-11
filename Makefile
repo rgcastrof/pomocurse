@@ -1,6 +1,6 @@
 .POSIX:
 
-NAME    = pcurse
+NAME    = pomocurse
 
 CC     = cc
 CFLAGS = -std=c99 -Wall -Wextra -pedantic
@@ -8,8 +8,8 @@ LDFLAGS = -lncurses
 
 BIN_DIR = /usr/local/bin
 
-SRC = pcurse.c
-OBJ = pcurse.o
+SRC = pomocurse.c
+OBJ = pomocurse.o
 
 all: $(NAME)
 $(NAME): $(OBJ)

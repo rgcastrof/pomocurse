@@ -54,7 +54,7 @@ static Timer
 	Timer *t = malloc(sizeof(Timer));
 	if (!t)
 		return NULL;
-	t->min = 1;
+	t->min = 25;
 	t->sec = 0;
 	t->minbreak = 5;
 	t->secbreak = 0;
