@@ -22,7 +22,7 @@ static void initpairs(void);
 static Timer *createtimer(void);
 static void clearscreen(void);
 static void drawmenu(int choice);
-static void drawbar(int min);
+static void drawbar(int totalsec, int remainsec);
 static int selchoice(int numopts);
 static void displaytimer(Timer *t, int sesscount, int min, int sec);
 static void updtimer(Timer *t, int *min, int *sec, int *status, int sesscount);
@@ -36,7 +36,6 @@ static const char *opts[] = {
 	"Start Session.", "Set Timer.", "About pomodoro.", "Exit."
 };
 static const int numopts = sizeof(opts) / sizeof(opts[0]);
-char bar[] = "[=====================]";
 
 static void
 initpairs(void)
@@ -55,7 +54,7 @@ static Timer
 	Timer *t = malloc(sizeof(Timer));
 	if (!t)
 		return NULL;
-	t->min = 25;
+	t->min = 1;
 	t->sec = 0;
 	t->minbreak = 5;
 	t->secbreak = 0;
@@ -90,10 +89,23 @@ drawmenu(int choice)
 }
 
 static void
-drawbar(int min)
+drawbar(int totalsec, int remainsec)
 {
-	mvprintw(BEGIN_ROW + 5, CENTER_COL(bar), "%s", bar);
-	bar[min-4] = ' ';
+	int barw = 30;
+	int filled = (remainsec * barw) / totalsec;
+	int centerbar = (COLS - barw) / 2;
+	mvprintw(BEGIN_ROW + 5, centerbar, "[");
+	for (int i = 0; i < barw; i++) {
+		if (i < filled) {
+			attron(COLOR_PAIR(4));
+			mvprintw(BEGIN_ROW + 5, centerbar + 1 + i, "=");
+			attroff(COLOR_PAIR(4));
+		}
+			
+		else
+			mvprintw(BEGIN_ROW + 5, centerbar + 1 + i, " ");
+		mvprintw(BEGIN_ROW + 5, centerbar + 1 + barw, "]");
+	}
 }
 
 static int
@@ -124,6 +136,9 @@ static void
 displaytimer(Timer *t, int sesscount, int min, int sec)
 {
 	clearscreen();
+	int remainsec = min * 60 + sec;
+	int totalsec = (t->state ? t->min * 60 + t->sec : t->minbreak * 60 + t->secbreak);
+	drawbar(totalsec, remainsec);
 	if (t->state) {
 		attron(COLOR_PAIR(1));
 		mvprintw(BEGIN_ROW, CENTER_COL("FOCUS"), "FOCUS");
@@ -141,7 +156,6 @@ displaytimer(Timer *t, int sesscount, int min, int sec)
 	attron(COLOR_PAIR(3));
 	mvprintw(BEGIN_ROW + 3, CENTER_COL(t->sessionbuf), "%s", t->sessionbuf);
 	attroff(COLOR_PAIR(3));
-	drawbar(min);
 	refresh();
 }
 
