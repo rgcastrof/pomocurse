@@ -8,11 +8,11 @@
 #define CENTER_COL(str) (COLS - strlen(str)) / 2
 
 typedef struct Timer {
-	int min;
-	int sec;
-	int minbreak;
-	int secbreak;
-	int session;
+	int focusmin;
+	int focussec;
+	int pausemin;
+	int pausesec;
+	int sessions;
 	int state;
 	char timebuf[32];
 	char sessionbuf[32];
@@ -28,7 +28,7 @@ static int selchoice(int numopts);
 static void drawtimer(Timer *t, int sesscount, int min, int sec);
 static void updtimer(Timer *t, int *min, int *sec, int *status, int sesscount);
 static void startpomo(Timer *t);
-// static void settime(Timer *t);
+static void settime(int *focus, int *pause, int *sessions);
 static void showinfo(void);
 static void runmenu(Timer **t);
 static void setup(void);
@@ -59,11 +59,11 @@ static Timer
 	Timer *t = malloc(sizeof(Timer));
 	if (!t)
 		return NULL;
-	t->min = 25;
-	t->sec = 0;
-	t->minbreak = 5;
-	t->secbreak = 0;
-	t->session = 4;
+	t->focusmin = 25;
+	t->focussec = 0;
+	t->pausemin = 5;
+	t->pausesec = 0;
+	t->sessions = 4;
 	t->state = 1;
 
 	return t;
@@ -99,7 +99,9 @@ drawbar(int totalsec, int remainsec)
 	int barw = 30;
 	int filled = (remainsec * barw) / totalsec;
 	int centerbar = (COLS - barw) / 2;
+
 	mvprintw(BEGIN_ROW + 5, centerbar, "[");
+
 	for (int i = 0; i < barw; i++) {
 		if (i < filled) {
 			attron(COLOR_PAIR(4));
@@ -117,6 +119,7 @@ static int
 selchoice(int numopts)
 {
 	int ch, choice = 0;
+
 	while (1) {
 		drawmenu(choice);
 		ch = getch();
@@ -141,9 +144,12 @@ static void
 drawtimer(Timer *t, int sesscount, int min, int sec)
 {
 	clearscreen();
+
 	int remainsec = min * 60 + sec;
-	int totalsec = (t->state ? t->min * 60 + t->sec : t->minbreak * 60 + t->secbreak);
+	int totalsec = (t->state ? t->focusmin * 60 + t->focussec : t->pausemin * 60 + t->pausesec);
+
 	drawbar(totalsec, remainsec);
+
 	if (t->state) {
 		attron(COLOR_PAIR(1));
 		mvprintw(BEGIN_ROW, CENTER_COL("FOCUS"), "FOCUS");
@@ -154,10 +160,11 @@ drawtimer(Timer *t, int sesscount, int min, int sec)
 		mvprintw(BEGIN_ROW, CENTER_COL("BREAK"), "BREAK");
 		attroff(COLOR_PAIR(2));
 	}
+
 	snprintf(t->timebuf, sizeof(t->timebuf), "Time: %02d:%02d", min, sec);
 	mvprintw(BEGIN_ROW + 1, CENTER_COL(t->timebuf), "%s", t->timebuf);
 
-	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sesscount, t->session);
+	snprintf(t->sessionbuf, sizeof(t->sessionbuf), "%d/%d", sesscount, t->sessions);
 	attron(COLOR_PAIR(3));
 	mvprintw(BEGIN_ROW + 3, CENTER_COL(t->sessionbuf), "%s", t->sessionbuf);
 	attroff(COLOR_PAIR(3));
@@ -186,21 +193,65 @@ static void
 startpomo(Timer *t)
 {
 	int sesscount = 1;
-	for (int i = 0; i < t->session; i++) {
-		int work_min = t->min;
-		int work_sec = t->sec;
-		updtimer(t, &work_min, &work_sec, &t->state, sesscount);
-		int break_min = t->minbreak;
-		int break_sec = t->secbreak;
-		updtimer(t, &break_min, &break_sec, &t->state, sesscount);
+
+	for (int i = 0; i < t->sessions; i++) {
+		int focusmin = t->focusmin;
+		int focussec = t->focussec;
+		updtimer(t, &focusmin, &focussec, &t->state, sesscount);
+		int pausemin = t->pausemin;
+		int pausesec = t->pausesec;
+		updtimer(t, &pausemin, &pausesec, &t->state, sesscount);
 		sesscount++;
 	}
 }
 
-// static void
-// settime(Timer *t)
-// {
-// }
+static void
+settime(int *focus, int *pause, int *sessions)
+{
+	clearscreen();
+
+	WINDOW *win;
+	int height = 10, width = 40;
+	int starty = (LINES - height) / 2, startx = (COLS - width) / 2;
+	char input[3];
+	int wrows, wcols;
+
+	win = newwin(height, width, starty + 2, startx);
+	getmaxyx(win, wrows, wcols);
+	box(win, 0, 0);
+	keypad(win, TRUE);
+	echo();
+	curs_set(TRUE);
+
+	mvwprintw(win, 1, (wcols - strlen("Set the timer: (minutes):")) / 2, "Set the timer (minutes):");
+	wattron(win, A_BOLD);
+	wattron(win, COLOR_PAIR(1));
+	mvwprintw(win, 3, 2, "Focus: ");
+	wattroff(win, A_BOLD);
+	wattroff(win, COLOR_PAIR(1));
+	wgetnstr(win, input, 2);
+	*focus = atoi(input);
+
+	wattron(win, A_BOLD);
+	wattron(win, COLOR_PAIR(2));
+	mvwprintw(win, 4, 2, "Break: ");
+	wattroff(win, A_BOLD);
+	wattroff(win, COLOR_PAIR(2));
+	wgetnstr(win, input, 2);
+	*pause = atoi(input);
+
+	wattron(win, A_BOLD);
+	wattron(win, COLOR_PAIR(3));
+	mvwprintw(win, 5, 2, "Sessions: ");
+	wattroff(win, A_BOLD);
+	wattroff(win, COLOR_PAIR(3));
+	wgetnstr(win, input, 2);
+	*sessions = atoi(input);
+
+	noecho();
+	delwin(win);
+	curs_set(FALSE);
+}
 
 static void
 showinfo(void)
@@ -221,6 +272,7 @@ showinfo(void)
 		"Press any key to return to the menu.",
 	};
 	int numlines = sizeof(info) / sizeof(info[0]);
+
 	for (int i = 0; i < numlines; i++) {
 		mvprintw(((LINES - numlines) / 2) + i, CENTER_COL(info[i]), "%s", info[i]);
 	}
@@ -243,9 +295,9 @@ runmenu(Timer **t)
 				startpomo(*t);
 				break;
 			case 1:
-				// if (!t)
-				// 	t = createtimer();
-				// settime(t);
+				if (!*t)
+					*t = createtimer();
+				settime(&(*t)->focusmin, &(*t)->pausemin, &(*t)->sessions);
 				break;
 			case 2:
 				showinfo();
@@ -273,16 +325,17 @@ static void
 handleopts(int argc, char *argv[], Timer *t)
 {
 	int opt;
+
 	while ((opt = getopt(argc, argv, "f:p:s:h")) != -1) {
 		switch (opt) {
 			case 'f':
-				t->min = atoi(optarg);
+				t->focusmin = atoi(optarg);
 				break;
 			case 'p':
-				t->minbreak = atoi(optarg);
+				t->pausemin = atoi(optarg);
 				break;
 			case 's':
-				t->session = atoi(optarg);
+				t->sessions = atoi(optarg);
 				break;
 			case 'h':
 				help();
